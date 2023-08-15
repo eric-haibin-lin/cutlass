@@ -1493,9 +1493,9 @@ int main(int argc, char const **args) {
     ElementAccumulator,
     cutlass::arch::OpClassTensorOp,
     cutlass::arch::Sm80,
-    cutlass::gemm::GemmShape<128, 128, 32>,
-    cutlass::gemm::GemmShape<64, 64, 32>,
-    cutlass::gemm::GemmShape<16, 8, 16>,
+    cutlass::gemm::GemmShape<128, 128, 32>, // The tile size a thread block will compute
+    cutlass::gemm::GemmShape<64, 64, 32>,   // Tile size a warp will compute
+    cutlass::gemm::GemmShape<16, 8, 16>,    // The size of MMA op
     cutlass::epilogue::thread::LinearCombination<
       ElementOutput,
       128 / cutlass::sizeof_bits<ElementOutput>::value,
@@ -1503,7 +1503,7 @@ int main(int argc, char const **args) {
       ElementAccumulator
     >,
     cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<8>,
-    4
+    4 // Number of stages used in the pipelined mainloop
   >;
 
   // Define a grouped GEMM kernel with all template parameters set except
@@ -1512,8 +1512,8 @@ int main(int argc, char const **args) {
   using GemmKernel = typename cutlass::gemm::kernel::DefaultGemmGrouped<
     ElementA,
     LayoutA,
-    cutlass::ComplexTransform::kNone,
-    8,
+    cutlass::ComplexTransform::kNone, // Complex elementwise transformation on A operand
+    8,                                // Access granularity of A matrix in units of elements
     ElementB,
     LayoutB,
     cutlass::ComplexTransform::kNone,
@@ -1550,12 +1550,14 @@ int main(int argc, char const **args) {
   for (GroupScheduleMode mode : options.scheduler_modes) {
     Result result;
     switch (mode) {
+      // Perform all scheduling on device
       case GroupScheduleMode::kDeviceOnly:
         {
           TestbedGrouped<GemmGrouped, GroupScheduleMode::kDeviceOnly> runner(options);
           result = runner.profile();
           break;
         }
+      // Precompute on the host the full sequence of problems to access
       case GroupScheduleMode::kHostPrecompute:
         {
           TestbedGrouped<GemmGrouped, GroupScheduleMode::kHostPrecompute> runner(options);
